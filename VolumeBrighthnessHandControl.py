@@ -35,6 +35,14 @@ class HandDetector:
                     cv2.circle(img, (cx, cy), 5, (255, 0, 255), cv2.FILLED)
         return lmList
 
+    def getHandedness(self):
+        # Returns a list of strings ('Right' or 'Left') indicating hand types
+        handedness = []
+        if self.results.multi_handedness:
+            for hand in self.results.multi_handedness:
+                handedness.append(hand.classification[0].label)
+        return handedness
+
 #########################
 wCam, hCam = 640, 480
 #########################
@@ -68,10 +76,11 @@ while True:
     success, img = cap.read()
     img = detector.findHands(img)
     lmList = detector.findPosition(img, draw=False)
+    handedness = detector.getHandedness()
+
     if len(lmList) != 0:
-        #print(lmList[4], lmList[8])
-        x1, y1 = lmList[4][1], lmList[4][2]
-        x2, y2 = lmList[8][1], lmList[8][2]
+        x1, y1 = lmList[4][1], lmList[4][2]  # Thumb tip
+        x2, y2 = lmList[8][1], lmList[8][2]  # Index finger tip
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
 
         cv2.circle(img, (x1, y1), 15, (255, 0, 255), cv2.FILLED)
@@ -80,25 +89,29 @@ while True:
         cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
 
         length = math.hypot(x2 - x1, y2 - y1)
-        #print(length)
 
-        # 230, 18
-        # volRange -65, 0
+        if handedness[0] == "Right":
+            # Right hand controls volume
+            vol = np.interp(length, [18, 230], [minVol, maxVol])
+            volBar = np.interp(length, [18, 230], [400, 150])
+            volPer = np.interp(length, [18, 230], [0, 100])
+            volume.SetMasterVolumeLevel(vol, None)
 
-        vol = np.interp(length, [18, 230], [minVol, maxVol])
-        volBar = np.interp(length, [18, 230], [400, 150])
-        volPer = np.interp(length, [18, 230], [0, 100])
-        print(vol)
-        volume.SetMasterVolumeLevel(vol, None)
-        bright = np.interp(length, [18, 230], [minBright, maxBright])
-        sbc.set_brightness(bright)
+            # Display volume bar
+            cv2.rectangle(img, (50, 150), (85, 400), (255, 0, 0), 3)
+            cv2.rectangle(img, (50, int(volBar)), (85, 400), (255, 0, 0), cv2.FILLED)
+            cv2.putText(img, f'Volume: {int(volPer)}%', (40, 450), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 0), 3)
+
+        elif handedness[0] == "Left":
+            # Left hand controls brightness
+            bright = np.interp(length, [18, 230], [minBright, maxBright])
+            sbc.set_brightness(bright)
+
+            # Display brightness level
+            cv2.putText(img, f'Brightness: {int(bright)}%', (40, 450), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
 
         if length < 30:
             cv2.circle(img, (cx, cy), 15, (0, 255, 0), cv2.FILLED)
-
-    cv2.rectangle(img, (50, 150), (85, 400), (255, 0, 0), 3)
-    cv2.rectangle(img, (50, int(volBar)), (85, 400), (255, 0, 0), cv2.FILLED)
-    cv2.putText(img, f'{int(volPer)}%', (40, 450), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 0), 3)
 
     cTime = time.time()
     fps = 1 / (cTime - pTime)
